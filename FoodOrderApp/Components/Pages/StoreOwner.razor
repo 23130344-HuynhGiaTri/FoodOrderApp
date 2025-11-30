@@ -1,0 +1,121 @@
+﻿@page "/store"
+@rendermode InteractiveServer
+@using FoodOrderApp.Models
+@using FoodOrderApp.Services
+@inject OrderService OrderService
+
+<h3>🏪 Store Owner Dashboard</h3>
+
+<button class="btn btn-secondary" @onclick="RefreshOrders">
+    🔄 Refresh Orders
+</button>
+
+<h4 class="mt-4">Incoming Orders</h4>
+
+@if (orders.Any())
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Order ID</th>
+                <th>Status</th>
+                <th>Time Left</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var order in orders)
+            {
+                <tr>
+                    <td>@order. Id. ToString(). Substring(0, 8)... </td>
+                    <td>
+                        <span class="badge @GetStatusBadge(order.Status)">
+                            @order.Status
+                        </span>
+                    </td>
+                    <td>@GetTimeLeft(order)</td>
+                    <td>
+                        @if (order.Status == OrderStatus.Pending)
+                        {
+                            <button class="btn btn-success btn-sm" @onclick="() => AcceptOrder(order.Id)">
+                                ✅ Accept
+                            </button>
+                        }
+                        else if (order.Status == OrderStatus.Processing)
+                        {
+                            <button class="btn btn-primary btn-sm" @onclick="() => DeliverOrder(order.Id)">
+                                🚚 Deliver
+                            </button>
+                        }
+                        else
+                        {
+                            <span class="text-success">✔ Done</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else
+{
+    <p>No orders yet. </p>
+}
+
+@code {
+    private List<Order> orders = new();
+    private System.Timers.Timer? refreshTimer;
+
+    protected override void OnInitialized()
+    {
+        RefreshOrders();
+
+        // Timer to refresh the UI every second
+        refreshTimer = new System.Timers.Timer(1000);
+        refreshTimer.Elapsed += (s, e) => InvokeAsync(() =>
+        {
+            RefreshOrders();
+            StateHasChanged();
+        });
+        refreshTimer.Start();
+    }
+
+    private void RefreshOrders()
+    {
+        orders = OrderService.GetAllOrders();
+    }
+
+    private void AcceptOrder(Guid orderId)
+    {
+        OrderService.AcceptOrder(orderId);
+        RefreshOrders();
+    }
+
+    private void DeliverOrder(Guid orderId)
+    {
+        OrderService.UpdateOrderStatus(orderId, OrderStatus.Delivered);
+        RefreshOrders();
+    }
+
+    private string GetTimeLeft(Order order)
+    {
+        var timeLeft = order.ExpiresAt - DateTime.UtcNow;
+        if (timeLeft.TotalSeconds <= 0)
+            return "Expired";
+        return $"{(int)timeLeft.TotalSeconds}s";
+    }
+
+    private string GetStatusBadge(OrderStatus status) => status switch
+    {
+        OrderStatus.Pending => "bg-warning",
+        OrderStatus.Processing => "bg-info",
+        OrderStatus.Delivered => "bg-success",
+        _ => "bg-secondary"
+    };
+
+    public void Dispose()
+    {
+        refreshTimer?.Stop();
+        refreshTimer?.Dispose();
+    }
+}

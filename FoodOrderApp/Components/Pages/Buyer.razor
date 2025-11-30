@@ -1,0 +1,100 @@
+﻿@page "/buyer"
+@rendermode InteractiveServer
+@using FoodOrderApp.Models
+@using FoodOrderApp.Services
+@inject OrderService OrderService
+
+<h3>🛒 Buyer Dashboard</h3>
+
+<button class="btn btn-primary" @onclick="CreateOrder">
+    Create New Order
+</button>
+
+<button class="btn btn-secondary ms-2" @onclick="RefreshOrders">
+    🔄 Refresh
+</button>
+
+<h4 class="mt-4">My Orders</h4>
+
+@if (orders.Any())
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Order ID</th>
+                <th>Status</th>
+                <th>Time Left</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var order in orders)
+            {
+                <tr>
+                    <td>@order. Id. ToString(). Substring(0, 8)... </td>
+                    <td>
+                        <span class="badge @GetStatusBadge(order.Status)">
+                            @order.Status
+                        </span>
+                    </td>
+                    <td>@GetTimeLeft(order)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else
+{
+    <p>No orders yet. </p>
+}
+
+@code {
+    private List<Order> orders = new();
+    private System.Timers.Timer? refreshTimer;
+
+    protected override void OnInitialized()
+    {
+        RefreshOrders();
+
+        // Timer to refresh the UI every second for countdown
+        refreshTimer = new System.Timers.Timer(1000);
+        refreshTimer.Elapsed += (s, e) => InvokeAsync(() =>
+        {
+            RefreshOrders();
+            StateHasChanged();
+        });
+        refreshTimer.Start();
+    }
+
+    private void CreateOrder()
+    {
+        OrderService.CreateOrder("buyer-1");
+        RefreshOrders();
+    }
+
+    private void RefreshOrders()
+    {
+        orders = OrderService.GetAllOrders();
+    }
+
+    private string GetTimeLeft(Order order)
+    {
+        var timeLeft = order.ExpiresAt - DateTime.UtcNow;
+        if (timeLeft.TotalSeconds <= 0)
+            return "Expired";
+        return $"{(int)timeLeft.TotalSeconds}s";
+    }
+
+    private string GetStatusBadge(OrderStatus status) => status switch
+    {
+        OrderStatus.Pending => "bg-warning",
+        OrderStatus.Processing => "bg-info",
+        OrderStatus.Delivered => "bg-success",
+        _ => "bg-secondary"
+    };
+
+    public void Dispose()
+    {
+        refreshTimer?.Stop();
+        refreshTimer?.Dispose();
+    }
+}
