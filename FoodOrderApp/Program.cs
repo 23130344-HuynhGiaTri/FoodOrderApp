@@ -1,15 +1,12 @@
 using FoodOrderApp.Components;
-using FoodOrderApp.Hubs;
 using FoodOrderApp.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
 // Add SignalR and OrderService
-builder.Services.AddSignalR();
 builder.Services.AddSingleton<OrderService>();
 
 var app = builder.Build();
@@ -27,8 +24,5 @@ app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
-
-// Add SignalR hub endpoint
-app.MapHub<OrderHub>("/orderhub");
 
 app.Run();

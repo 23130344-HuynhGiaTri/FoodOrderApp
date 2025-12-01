@@ -1,83 +1,84 @@
 ﻿@page "/store"
-@rendermode InteractiveServer
+@* @rendermode InteractiveServer *@
 @using FoodOrderApp.Models
 @using FoodOrderApp.Services
 @inject OrderService OrderService
+@implements IDisposable
 
-<h3>🏪 Store Owner Dashboard</h3>
+<div class="container mt-4">
+    <h2 class="mb-4">🏪 Store Dashboard</h2>
 
-<button class="btn btn-secondary" @onclick="RefreshOrders">
-    🔄 Refresh Orders
-</button>
-
-<h4 class="mt-4">Incoming Orders</h4>
-
-@if (orders.Any())
-{
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Order ID</th>
-                <th>Status</th>
-                <th>Time Left</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
+    @if (orders.Any())
+    {
+        <div class="row">
             @foreach (var order in orders)
             {
-                <tr>
-                    <td>@order. Id. ToString(). Substring(0, 8)... </td>
-                    <td>
-                        <span class="badge @GetStatusBadge(order.Status)">
-                            @order.Status
-                        </span>
-                    </td>
-                    <td>@GetTimeLeft(order)</td>
-                    <td>
-                        @if (order.Status == OrderStatus.Pending)
-                        {
-                            <button class="btn btn-success btn-sm" @onclick="() => AcceptOrder(order.Id)">
-                                ✅ Accept
-                            </button>
-                        }
-                        else if (order.Status == OrderStatus.Processing)
-                        {
-                            <button class="btn btn-primary btn-sm" @onclick="() => DeliverOrder(order.Id)">
-                                🚚 Deliver
-                            </button>
-                        }
-                        else
-                        {
-                            <span class="text-success">✔ Done</span>
-                        }
-                    </td>
-                </tr>
+                <div class="col-md-4 mb-3">
+                    <div class="card @GetCardBorder(order.Status) h-100">
+                        <div class="card-header d-flex justify-content-between">
+                            <span><strong>Order #@(order.Id.ToString().Substring(0, 6))</strong></span>
+                            <span class="badge @GetStatusBadge(order.Status)">
+                                @GetStatusText(order.Status)
+                            </span>
+                        </div>
+                        <div class="card-body text-center">
+                            <h1 class="display-4 @GetTimerColor(order)">
+                                @GetTimeLeft(order)
+                            </h1>
+                            <p class="text-muted mb-3">@GetStatusMessage(order.Status)</p>
+
+                            @if (order.Status == OrderStatus.Pending)
+                            {
+                                <button class="btn btn-success btn-lg w-100" @onclick="() => AcceptOrder(order.Id)">
+                                    ✅ Accept Order
+                                </button>
+                            }
+                            else if (order.Status == OrderStatus.Processing)
+                            {
+                                <button class="btn btn-primary btn-lg w-100" @onclick="() => DeliverOrder(order.Id)">
+                                    🚚 Mark Delivered
+                                </button>
+                            }
+                            else
+                            {
+                                <div class="alert alert-success mb-0">
+                                    ✔ Completed
+                                </div>
+                            }
+                        </div>
+                        <div class="card-footer text-muted text-center">
+                            Created: @(order.CreatedAt.ToLocalTime().ToString("HH:mm:ss"))
+                        </div>
+                    </div>
+                </div>
             }
-        </tbody>
-    </table>
-}
-else
-{
-    <p>No orders yet. </p>
-}
+        </div>
+    }
+    else
+    {
+        <div class="text-center py-5">
+            <h4 class="text-muted">📭 No orders yet</h4>
+            <p>Waiting for customers... </p>
+        </div>
+    }
+</div>
 
 @code {
     private List<Order> orders = new();
-    private System.Timers.Timer? refreshTimer;
 
     protected override void OnInitialized()
     {
+        OrderService.OnOrdersChanged += HandleOrdersChanged;
         RefreshOrders();
+    }
 
-        // Timer to refresh the UI every second
-        refreshTimer = new System.Timers.Timer(1000);
-        refreshTimer.Elapsed += (s, e) => InvokeAsync(() =>
+    private void HandleOrdersChanged()
+    {
+        InvokeAsync(() =>
         {
             RefreshOrders();
             StateHasChanged();
         });
-        refreshTimer.Start();
     }
 
     private void RefreshOrders()
@@ -88,34 +89,63 @@ else
     private void AcceptOrder(Guid orderId)
     {
         OrderService.AcceptOrder(orderId);
-        RefreshOrders();
     }
 
     private void DeliverOrder(Guid orderId)
     {
         OrderService.UpdateOrderStatus(orderId, OrderStatus.Delivered);
-        RefreshOrders();
     }
 
     private string GetTimeLeft(Order order)
     {
         var timeLeft = order.ExpiresAt - DateTime.UtcNow;
         if (timeLeft.TotalSeconds <= 0)
-            return "Expired";
-        return $"{(int)timeLeft.TotalSeconds}s";
+            return "00:00";
+        return $"{(int)timeLeft.TotalMinutes:D2}:{(int)timeLeft.Seconds:D2}";
     }
 
     private string GetStatusBadge(OrderStatus status) => status switch
     {
-        OrderStatus.Pending => "bg-warning",
+        OrderStatus.Pending => "bg-warning text-dark",
         OrderStatus.Processing => "bg-info",
         OrderStatus.Delivered => "bg-success",
         _ => "bg-secondary"
     };
 
+    private string GetStatusText(OrderStatus status) => status switch
+    {
+        OrderStatus.Pending => "⏳ New",
+        OrderStatus.Processing => "👨‍🍳 Cooking",
+        OrderStatus.Delivered => "✅ Done",
+        _ => "Unknown"
+    };
+
+    private string GetStatusMessage(OrderStatus status) => status switch
+    {
+        OrderStatus.Pending => "New order!  Accept before time runs out",
+        OrderStatus.Processing => "Preparing food...",
+        OrderStatus.Delivered => "Order delivered! ",
+        _ => ""
+    };
+
+    private string GetCardBorder(OrderStatus status) => status switch
+    {
+        OrderStatus.Pending => "border-warning",
+        OrderStatus.Processing => "border-info",
+        OrderStatus.Delivered => "border-success",
+        _ => ""
+    };
+
+    private string GetTimerColor(Order order)
+    {
+        var timeLeft = order.ExpiresAt - DateTime.UtcNow;
+        if (timeLeft.TotalSeconds <= 10) return "text-danger";
+        if (timeLeft.TotalSeconds <= 30) return "text-warning";
+        return "text-dark";
+    }
+
     public void Dispose()
     {
-        refreshTimer?.Stop();
-        refreshTimer?.Dispose();
+        OrderService.OnOrdersChanged -= HandleOrdersChanged;
     }
 }
